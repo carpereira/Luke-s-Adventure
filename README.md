@@ -17,3 +17,6 @@ A parte especial está na combinação de:
 - Mistura entre plataforma clássico + roguelike, pois cada jogada pode ser diferente dependendo da sorte e das escolhas do jogador.
 
 ## 5. Mockups na apresentação.
+
+## 6. Capa
+![Capa temporária](https://github.com/Luke-s-Adventure-Game/Luke-s-Adventure/blob/main/capa.png)
