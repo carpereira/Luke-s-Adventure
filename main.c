@@ -1,6 +1,9 @@
 #include <SDL2/SDL.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <SDL2/SDL_ttf.h>
 
 #define WINDOW_LARG 1000
 #define WINDOW_ALT 600
@@ -32,6 +35,8 @@ typedef struct {
     SDL_Rect ret;
     int dir;
     int veloc;
+    int velY;
+    bool ativo;
 } Inimigo;
 
 bool colidem(SDL_Rect a, SDL_Rect b) {
@@ -56,6 +61,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (TTF_Init() == -1) {
+        printf("Erro TTF_Init: %s\n", TTF_GetError());
+    }
+    TTF_Font *font = TTF_OpenFont("assets/DejaVuSans.ttf", 20);
+    if (!font) {
+        printf("Erro ao abrir fonte: %s\n", TTF_GetError());
+    }
+
+    SDL_Color textColor = {255, 255, 255, 255};
+
+    srand(time(NULL));
+
     // --- Personagem ---
     Character Luke;
     Luke.ret.w = 50;
@@ -71,12 +88,12 @@ int main(int argc, char **argv) {
     Luke.vidas = MAX_VIDAS;
     Luke.invencivel = 0;
 
-    // --- Fase ---
+    // --- Controle de Fase ---
     int cameraX = 0;
     int faseLargura = 3000;
     int faseAtual = 1;
 
-    // --- Obstáculos ---
+    // --- Obstáculos fase 1---
     Obstaculo obstaculos[MAX_OBSTACULOS];
     int qtdObs = 0;
 
@@ -95,6 +112,8 @@ int main(int argc, char **argv) {
     inimigos[1] = (Inimigo){{1600, WINDOW_ALT - 150, 50, 50}, 1, 3};
     inimigos[2] = (Inimigo){{2300, WINDOW_ALT - 150, 50, 50}, -1, 2};
 
+    Uint32 ultimoSpawn = SDL_GetTicks();
+    
     // --- Estados de tecla ---
     bool esqPress = false, dirPress = false, baixoPress = false, puloPress = false;
     bool rodando = true;
@@ -150,28 +169,24 @@ int main(int argc, char **argv) {
         Luke.velY += GRAVIDADE;
 
         bool noChao = false;
-        for (int i = 0; i < qtdObs; i++) {
-            if (!obstaculos[i].solido) continue;
-            if (colidem(Luke.ret, obstaculos[i].ret)) {
-                if (obstaculos[i].plataforma) {
-                    if (Luke.velY > 0 && (Luke.ret.y + Luke.ret.h) - Luke.velY <= obstaculos[i].ret.y) {
+        if (faseAtual == 1) {
+            for (int i = 0; i < qtdObs; i++) {
+                if (!obstaculos[i].solido) continue;
+                if (colidem(Luke.ret, obstaculos[i].ret)) {
+                    if (Luke.velY > 0 && Luke.ret.y + Luke.ret.h > obstaculos[i].ret.y) {
                         Luke.ret.y = obstaculos[i].ret.y - Luke.ret.h;
                         Luke.velY = 0;
                         Luke.pulando = false;
                         noChao = true;
                     }
-                    continue;
                 }
-
-                if (Luke.velY > 0 && Luke.ret.y + Luke.ret.h > obstaculos[i].ret.y) {
-                    Luke.ret.y = obstaculos[i].ret.y - Luke.ret.h;
-                    Luke.velY = 0;
-                    Luke.pulando = false;
-                    noChao = true;
-                } else if (Luke.velY < 0 && Luke.ret.y < obstaculos[i].ret.y + obstaculos[i].ret.h) {
-                    Luke.ret.y = obstaculos[i].ret.y + obstaculos[i].ret.h;
-                    Luke.velY = 0;
-                }
+            }
+        } else {
+            if (Luke.ret.y + Luke.ret.h >= WINDOW_ALT - 50) {
+                Luke.ret.y = WINDOW_ALT - 150;
+                Luke.velY = 0;
+                Luke.pulando = false;
+                noChao = true;
             }
         }
 
@@ -192,17 +207,41 @@ int main(int argc, char **argv) {
         }
 
         // --- Atualiza inimigos ---
-        for (int i = 0; i < qtdInimigos; i++) {
-            inimigos[i].ret.x += inimigos[i].dir * inimigos[i].veloc;
-            if (inimigos[i].ret.x < 500 || inimigos[i].ret.x > 2500)
-                inimigos[i].dir *= -1; // muda direção
+        if (faseAtual == 1) {
+            for (int i = 0; i < qtdInimigos; i++) {
+                inimigos[i].ret.x += inimigos[i].dir * inimigos[i].veloc;
+                if (inimigos[i].ret.x < 500 || inimigos[i].ret.x > 2500)
+                    inimigos[i].dir *= -1;
+            }
+        } else if (faseAtual == 2) {
+            // Spawn de inimigos caindo
+            Uint32 agora = SDL_GetTicks();
+            if (agora - ultimoSpawn > 1500) {
+                for (int i = 0; i < MAX_INIMIGOS; i++) {
+                    if (!inimigos[i].ativo) {
+                        inimigos[i].ret = (SDL_Rect){rand() % (WINDOW_LARG - 50), -50, 40, 40};
+                        inimigos[i].velY = 3 + rand() % 4;
+                        inimigos[i].ativo = true;
+                        break;
+                    }
+                }
+                ultimoSpawn = agora;
+            }
+
+            // Atualiza queda
+            for (int i = 0; i < MAX_INIMIGOS; i++) {
+                if (!inimigos[i].ativo) continue;
+                inimigos[i].ret.y += inimigos[i].velY;
+                if (inimigos[i].ret.y > WINDOW_ALT)
+                    inimigos[i].ativo = false;
+            }
         }
 
         // --- Dano por colisão com inimigos ---
         if (Luke.invencivel > 0) Luke.invencivel--;
 
-        for (int i = 0; i < qtdInimigos; i++) {
-            if (colidem(Luke.ret, inimigos[i].ret) && Luke.invencivel == 0) {
+        for (int i = 0; i < MAX_INIMIGOS; i++) {
+            if (inimigos[i].ativo && colidem(Luke.ret, inimigos[i].ret) && Luke.invencivel == 0) {
                 Luke.coracoes--;
                 Luke.invencivel = 60; // ~1 segundo de invencibilidade
                 if (Luke.coracoes <= 0) {
@@ -233,31 +272,49 @@ int main(int argc, char **argv) {
         SDL_Rect fundo = {0, 0, WINDOW_LARG, WINDOW_ALT};
         SDL_RenderFillRect(renderer, &fundo);
 
-        // Obstáculos
-        for (int i = 0; i < qtdObs; i++) {
-            SDL_Rect obsTela = obstaculos[i].ret;
-            obsTela.x -= cameraX;
-            if (obstaculos[i].plataforma)
-                SDL_SetRenderDrawColor(renderer, 150, 100, 50, 255);
-            else
+        // Fase 1: Obstáculos
+        if (faseAtual == 1) {
+            for (int i = 0; i < qtdObs; i++) {
+                SDL_Rect obsTela = obstaculos[i].ret;
+                obsTela.x -= cameraX;
                 SDL_SetRenderDrawColor(renderer, 100, 60, 20, 255);
-            SDL_RenderFillRect(renderer, &obsTela);
+                SDL_RenderFillRect(renderer, &obsTela);
+            }
+        } else {
+            SDL_SetRenderDrawColor(renderer, 70, 70, 100, 255);
+            SDL_Rect chao = {0, WINDOW_ALT - 50, WINDOW_LARG, 50};
+            SDL_RenderFillRect(renderer, &chao);
         }
 
         // Inimigos
         SDL_SetRenderDrawColor(renderer, 200, 30, 30, 255);
         for (int i = 0; i < qtdInimigos; i++) {
+            if (!inimigos[i].ativo) continue;
             SDL_Rect inimTela = inimigos[i].ret;
-            inimTela.x -= cameraX;
+            inimTela.x -= (faseAtual == 1 ? cameraX : 0);
             SDL_RenderFillRect(renderer, &inimTela);
         }
 
         // Porta
-        SDL_SetRenderDrawColor(renderer, 0, 200, 0, 255);
-        SDL_Rect portaTela = porta;
-        portaTela.x -= cameraX;
-        SDL_RenderFillRect(renderer, &portaTela);
+        if (faseAtual == 1) {
+            SDL_SetRenderDrawColor(renderer, 0, 200, 0, 255);
+            SDL_Rect portaTela = porta;
+            portaTela.x -= cameraX;
+            SDL_RenderFillRect(renderer, &portaTela);
 
+        // Transição de fase
+            SDL_Rect lukeTela = {Luke.ret.x - cameraX, Luke.ret.y, Luke.ret.w, Luke.ret.h};
+            if (SDL_HasIntersection(&lukeTela, &portaTela)) {
+                printf("Fase 1 concluída! Indo para fase 2...\n");
+                faseAtual = 2;
+                Luke.ret.x = 100;
+                Luke.ret.y = WINDOW_ALT - 150;
+                Luke.velY = 0;
+                cameraX = 0;
+                for (int i = 0; i < MAX_INIMIGOS; i++) inimigos[i].ativo = false;
+            }
+        }
+            
         // Luke
         if (Luke.invencivel % 10 < 5)
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
@@ -286,22 +343,43 @@ int main(int argc, char **argv) {
         SDL_Rect faseRect = {WINDOW_LARG - 150, margem, 100, 20};
         SDL_RenderFillRect(renderer, &faseRect);
 
-        SDL_RenderPresent(renderer);
-
-        // --- Fim da fase ---
-        if (SDL_HasIntersection(&lukeTela, &portaTela)) {
-            printf("Fase %d concluida!\n", faseAtual);
-            SDL_Delay(800);
-            faseAtual++;
-            Luke.ret.x = 100;
-            Luke.ret.y = WINDOW_ALT - 150;
-            cameraX = 0;
-        }
+        // Texto numérico ao lado dos corações
+    if (font) {
+        char buf[32];
+        SDL_Surface *surf = NULL;
+        SDL_Texture *tex = NULL;
+        int tw, th;
+    
+        // contador de corações (ex: "x3")
+        snprintf(buf, sizeof(buf), "x%d", Luke.coracoes);
+        surf = TTF_RenderText_Solid(font, buf, textColor);
+        tex = SDL_CreateTextureFromSurface(renderer, surf);
+        SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
+        SDL_Rect dstCor = { margem + MAX_CORACOES * (coracaoTam + 5) + 10, margem, tw, th };
+        SDL_RenderCopy(renderer, tex, NULL, &dstCor);
+        SDL_FreeSurface(surf);
+        SDL_DestroyTexture(tex);
+    
+        // contador de vidas (ex: "Vidas: 2")
+        snprintf(buf, sizeof(buf), "Vidas: %d", Luke.vidas);
+        surf = TTF_RenderText_Solid(font, buf, textColor);
+        tex = SDL_CreateTextureFromSurface(renderer, surf);
+        SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
+        SDL_Rect dstVidas = { margem, margem + 60, tw, th };
+        SDL_RenderCopy(renderer, tex, NULL, &dstVidas);
+        SDL_FreeSurface(surf);
+        SDL_DestroyTexture(tex);
     }
-
+        
+        SDL_RenderPresent(renderer);
+        SDL_Delay(16);
+         }
+    if (font) TTF_CloseFont(font);
+    TTF_Quit();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
 }
+
 
