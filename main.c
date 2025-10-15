@@ -43,6 +43,23 @@ bool colidem(SDL_Rect a, SDL_Rect b) {
     return SDL_HasIntersection(&a, &b);
 }
 
+bool podeLevantar(Character c, Obstaculo* obstaculos, int qtdObs) {
+    if (!c.abaixando)
+        return true;
+
+    SDL_Rect hitbox = c.ret;
+    int dif = 50; // diferença entre abaixado (50) e em pé (100)
+    hitbox.y -= dif; // simula levantar
+    hitbox.h += dif;
+
+    for (int i = 0; i < qtdObs; i++) {
+        if (!obstaculos[i].solido) continue;
+        if (colidem(hitbox, obstaculos[i].ret))
+            return false;
+    }
+    return true;
+}
+
 int main(int argc, char **argv) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         printf("Erro ao inicializar SDL: %s\n", SDL_GetError());
@@ -175,6 +192,12 @@ int main(int argc, char **argv) {
                         Luke.pulando = false;
                         noChao = true;
                     }
+                     else if (Luke.velY < 0 && Luke.ret.y < obstaculos[i].ret.y + obstaculos[i].ret.h) {
+                        Luke.ret.y = obstaculos[i].ret.y + obstaculos[i].ret.h;
+                        Luke.velY = 0;
+                        Luke.pulando = false;
+                        noChao = true;
+                    }
                 }
             }
         } else {
@@ -196,7 +219,7 @@ int main(int argc, char **argv) {
                 Luke.ret.h = 50;
                 Luke.ret.y += 50;
             }
-        } else if (Luke.abaixando) {
+        } else if (Luke.abaixando && podeLevantar(Luke, obstaculos, qtdObs)) {
             Luke.abaixando = false;
             Luke.ret.y -= 50;
             Luke.ret.h = 100;
