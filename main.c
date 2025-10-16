@@ -195,8 +195,8 @@ int main(int argc, char **argv) {
                      else if (Luke.velY < 0 && Luke.ret.y < obstaculos[i].ret.y + obstaculos[i].ret.h) {
                         Luke.ret.y = obstaculos[i].ret.y + obstaculos[i].ret.h;
                         Luke.velY = 0;
-                        Luke.pulando = false;
-                        noChao = true;
+                        Luke.pulando = true;
+                        noChao = false;
                     }
                 }
             }
@@ -399,6 +399,7 @@ if (font) {
     SDL_Quit();
     return 0;
 }
+
 
 
 
